@@ -22,7 +22,7 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 == Changelog ==
 
 = 1.0.0 =
-* First stable release following successful Plugin Check validation.
+* First stable release.
 
 = 0.1.2 =
 * Adjusted the required version to be a major release.

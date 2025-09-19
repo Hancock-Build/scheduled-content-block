@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Scheduled Content Block
  * Description: A simple container block that enables the easy scheduleing of content on WordPress pages or posts.
- * Version: 0.1.2
+ * Version: 1.0.0
  * Requires PHP: 8.2
  * Author: h.b Plugins
  * Author URI: https://hancock.build

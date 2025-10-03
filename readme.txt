@@ -3,7 +3,7 @@ Contributors: hancockbuild
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.2
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -20,6 +20,11 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 * Change who is able to see scheduled content on your site with role-based controls.
 
 == Changelog ==
+
+= 1.0.1 =
+* Replace the legacy `scb` prefix across the plugin with the unique `scblk` namespace.
+* Fix block editor loading by avoiding unescaped inline file contents during script registration.
+* Remove unused legacy prefixes and migration helpers now that the plugin ships with the `scblk` namespace.
 
 = 1.0.0 =
 * First stable release.

@@ -138,9 +138,9 @@
                 return 'Start: ' + formatReadable(start) + ' | End: ' + formatReadable(end);
             }
 
-            var blockProps = useBlockProps({ className: 'scb-editor-frame' });
+            var blockProps = useBlockProps({ className: 'scblk-editor-frame' });
             var innerBlocksProps = useInnerBlocksProps(
-                { className: 'scb-editor-inner' },
+                { className: 'scblk-editor-inner' },
                 { allowedBlocks: ALLOWED_BLOCKS, template: TEMPLATE, templateLock: false }
             );
 
@@ -165,9 +165,9 @@
                         el('p', { className: 'components-help' }, __('Choose your start and end date for content to be displayed. Dates and times use the site timezone.', 'scheduled-content-block')),
                         (function(){
                             var sp = isoToLocalParts(start);
-                            return el('div', { className: 'scb-datetime-group' },
+                            return el('div', { className: 'scblk-datetime-group' },
                                 el('label', { className: 'components-base-control__label' }, __('Start', 'scheduled-content-block')),
-                                el('div', { className: 'scb-datetime-row' },
+                                el('div', { className: 'scblk-datetime-row' },
                                     el('input', {
                                         type: 'date',
                                         className: 'components-text-control__input',
@@ -186,9 +186,9 @@
                         el('div', { style: { height: '10px' } }),
                         (function(){
                             var ep = isoToLocalParts(end);
-                            return el('div', { className: 'scb-datetime-group' },
+                            return el('div', { className: 'scblk-datetime-group' },
                                 el('label', { className: 'components-base-control__label' }, __('End', 'scheduled-content-block')),
-                                el('div', { className: 'scb-datetime-row' },
+                                el('div', { className: 'scblk-datetime-row' },
                                     el('input', {
                                         type: 'date',
                                         className: 'components-text-control__input',

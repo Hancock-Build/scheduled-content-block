@@ -4,6 +4,7 @@
     var el = wp.element.createElement;
     var Fragment = wp.element.Fragment;
     var useEffect = wp.element.useEffect;
+    var useState = wp.element.useState;
 
     var be = wp.blockEditor || wp.editor;
     var InspectorControls = be.InspectorControls;
@@ -83,6 +84,25 @@
         return toISOZ(dateStr + 'T' + timeStr);
     }
 
+    function isoToDate(iso) {
+        if (!iso) return null;
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return null;
+        return d;
+    }
+
+    function ensureEndNotBeforeStart(startIso, endIso) {
+        var startDate = isoToDate(startIso);
+        var endDate = isoToDate(endIso);
+        if (!startDate || !endDate) {
+            return { end: endIso, clamped: false };
+        }
+        if (endDate.getTime() < startDate.getTime()) {
+            return { end: startIso, clamped: true };
+        }
+        return { end: endIso, clamped: false };
+    }
+
     function getSiteTimeZone() {
         try {
             if (wp.date && (wp.date.__experimentalGetSettings || wp.date.getSettings)) {
@@ -122,6 +142,9 @@
             var end = attributes.end;
             var showPlaceholder = attributes.showPlaceholder;
             var placeholderText = attributes.placeholderText;
+            var rangeWarningState = useState(false);
+            var rangeWarning = rangeWarningState[0];
+            var setRangeWarning = rangeWarningState[1];
 
             useEffect(function(){
                 if (
@@ -133,6 +156,29 @@
                     setAttributes({ start: toISOZ(new Date()) });
                 }
             }, []);
+
+            useEffect(function(){
+                if (!start || !end) {
+                    return;
+                }
+                var adjustment = ensureEndNotBeforeStart(start, end);
+                if (adjustment.clamped && adjustment.end !== end) {
+                    setAttributes({ end: adjustment.end });
+                    setRangeWarning(true);
+                }
+            }, []);
+
+            useEffect(function(){
+                if (!start || !end) {
+                    setRangeWarning(false);
+                    return;
+                }
+                var startDate = isoToDate(start);
+                var endDate = isoToDate(end);
+                if (startDate && endDate && endDate.getTime() > startDate.getTime()) {
+                    setRangeWarning(false);
+                }
+            }, [start, end]);
 
             function scheduleLabel() {
                 return 'Start: ' + formatReadable(start) + ' | End: ' + formatReadable(end);
@@ -172,13 +218,45 @@
                                         type: 'date',
                                         className: 'components-text-control__input',
                                         value: sp.date,
-                                        onChange: function(e){ setAttributes({ start: combineLocal(e.target.value, sp.time) }); }
+                                        onChange: function(e){
+                                            var nextStart = combineLocal(e.target.value, sp.time);
+                                            if (!nextStart) {
+                                                setAttributes({ start: '' });
+                                                setRangeWarning(false);
+                                                return;
+                                            }
+                                            var updates = { start: nextStart };
+                                            if (end) {
+                                                var adjustment = ensureEndNotBeforeStart(nextStart, end);
+                                                if (adjustment.clamped && adjustment.end !== end) {
+                                                    updates.end = adjustment.end;
+                                                    setRangeWarning(true);
+                                                }
+                                            }
+                                            setAttributes(updates);
+                                        }
                                     }),
                                     el('input', {
                                         type: 'time',
                                         className: 'components-text-control__input',
                                         value: sp.time,
-                                        onChange: function(e){ setAttributes({ start: combineLocal(sp.date, e.target.value) }); }
+                                        onChange: function(e){
+                                            var nextStart = combineLocal(sp.date, e.target.value);
+                                            if (!nextStart) {
+                                                setAttributes({ start: '' });
+                                                setRangeWarning(false);
+                                                return;
+                                            }
+                                            var updates = { start: nextStart };
+                                            if (end) {
+                                                var adjustment = ensureEndNotBeforeStart(nextStart, end);
+                                                if (adjustment.clamped && adjustment.end !== end) {
+                                                    updates.end = adjustment.end;
+                                                    setRangeWarning(true);
+                                                }
+                                            }
+                                            setAttributes(updates);
+                                        }
                                     })
                                 )
                             );
@@ -193,17 +271,58 @@
                                         type: 'date',
                                         className: 'components-text-control__input',
                                         value: ep.date,
-                                        onChange: function(e){ setAttributes({ end: combineLocal(e.target.value, ep.time) }); }
+                                        onChange: function(e){
+                                            var nextEnd = combineLocal(e.target.value, ep.time);
+                                            if (!nextEnd) {
+                                                setAttributes({ end: '' });
+                                                setRangeWarning(false);
+                                                return;
+                                            }
+                                            var adjustment = ensureEndNotBeforeStart(start, nextEnd);
+                                            if (adjustment.clamped) {
+                                                if (adjustment.end !== end) {
+                                                    setAttributes({ end: adjustment.end });
+                                                }
+                                                if (start) {
+                                                    setRangeWarning(true);
+                                                }
+                                            } else {
+                                                setAttributes({ end: nextEnd });
+                                            }
+                                        }
                                     }),
                                     el('input', {
                                         type: 'time',
                                         className: 'components-text-control__input',
                                         value: ep.time,
-                                        onChange: function(e){ setAttributes({ end: combineLocal(ep.date, e.target.value) }); }
+                                        onChange: function(e){
+                                            var nextEnd = combineLocal(ep.date, e.target.value);
+                                            if (!nextEnd) {
+                                                setAttributes({ end: '' });
+                                                setRangeWarning(false);
+                                                return;
+                                            }
+                                            var adjustment = ensureEndNotBeforeStart(start, nextEnd);
+                                            if (adjustment.clamped) {
+                                                if (adjustment.end !== end) {
+                                                    setAttributes({ end: adjustment.end });
+                                                }
+                                                if (start) {
+                                                    setRangeWarning(true);
+                                                }
+                                            } else {
+                                                setAttributes({ end: nextEnd });
+                                            }
+                                        }
                                     })
                                 )
                             );
-                        })()
+                        })(),
+                        rangeWarning ? el(Notice, {
+                            status: 'warning',
+                            isDismissible: true,
+                            onRemove: function () { setRangeWarning(false); }
+                        }, __('The end time cannot be earlier than the start time. It has been adjusted to match the start.', 'scheduled-content-block')) : null
                     ),
                     el(
                         PanelBody,

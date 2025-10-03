@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Scheduled Content Block
  * Description: A simple container block that enables the easy scheduleing of content on WordPress pages or posts.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Requires PHP: 8.2
  * Author: h.b Plugins
  * Author URI: https://hancock.build
@@ -107,10 +107,11 @@ function scblk_render_callback( $attributes, $content, $block ) {
 	$hasEnd   = ( $atts['end']   !== '' && $endTs   !== null );
 
 	// If user set a value but it failed to parse, hide (safe).
-	$invalid = ( $atts['start'] !== '' && $startTs === null ) || ( $atts['end'] !== '' && $endTs === null );
-	if ( $invalid ) {
-		return ! empty( $atts['showPlaceholder'] ) ? '<div class="scblk-placeholder" aria-hidden="true">' . esc_html( (string) $atts['placeholderText'] ) . '</div>' : '';
-	}
+        $range_invalid = ( $hasStart && $hasEnd && $startTs !== null && $endTs !== null && $endTs < $startTs );
+        $invalid = ( $atts['start'] !== '' && $startTs === null ) || ( $atts['end'] !== '' && $endTs === null ) || $range_invalid;
+        if ( $invalid ) {
+                return ! empty( $atts['showPlaceholder'] ) ? '<div class="scblk-placeholder" aria-hidden="true">' . esc_html( (string) $atts['placeholderText'] ) . '</div>' : '';
+        }
 
 	$visible = true;
 	if ( $hasStart && $hasEnd ) {

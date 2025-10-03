@@ -1,21 +1,21 @@
-.scb-editor-wrap .scb-badge,
-.scb-editor-frame .components-notice {
+.scblk-editor-wrap .scblk-badge,
+.scblk-editor-frame .components-notice {
   margin-bottom: 8px;
 }
 
-.scb-editor-frame .scb-editor-inner {
+.scblk-editor-frame .scblk-editor-inner {
   border: 1px dashed #c3c4c7;
   padding: 12px;
   border-radius: 6px;
   background: #fff;
 }
 
-.scb-datetime-row {
+.scblk-datetime-row {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-.scb-datetime-row .components-text-control__input {
+.scblk-datetime-row .components-text-control__input {
   width: 100%;
 }

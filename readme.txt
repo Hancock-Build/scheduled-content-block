@@ -20,6 +20,13 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 * Optional integration with the Breeze caching plugin, purging the site's cache when content is scheduled to become active or inactive.
 * Change who is able to see scheduled content on your site with role-based controls.
 
+== Screenshots ==
+
+1. Search for or locate the Scheduled Container Block in the WordPress editor to get started.
+2. Place any content you'd like within your scheduled container and set the start/end time.
+3. The Scheduled Container block will match the width of your other content but can also be set to Wide or Full-Width.
+4. Use the plugin settings to change who can view the block outside of its set schedule and integrate with the Breeze cache plugin.
+
 == Changelog ==
 
 = 1.0.2 =

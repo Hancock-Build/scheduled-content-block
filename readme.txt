@@ -1,5 +1,6 @@
 === Scheduled Content Block ===
 Contributors: hancockbuild
+Tags: blocks, gutenberg, editor, gutenberg blocks, dynamic content
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.2

@@ -2,9 +2,9 @@
 Contributors: hancockbuild
 Tags: blocks, gutenberg, editor, gutenberg blocks, dynamic content
 Requires at least: 6.0
-Tested up to: 6.8
+Tested up to: 6.9
 Requires PHP: 8.2
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -28,6 +28,9 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 4. Use the plugin settings to change who can view the block outside of its set schedule and integrate with the Breeze cache plugin.
 
 == Changelog ==
+
+= 1.0.3 =
+* Fix Cover blocks inside scheduled containers so wide alignment options are available.
 
 = 1.0.2 =
 * Prevent scheduling a stop time earlier than the start time and treat invalid ranges as hidden on the frontend.

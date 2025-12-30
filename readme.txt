@@ -31,6 +31,7 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 
 = 1.0.3 =
 * Fix Cover blocks inside scheduled containers so wide alignment options are available.
+* Tested up to WordPress 6.9.
 
 = 1.0.2 =
 * Prevent scheduling a stop time earlier than the start time and treat invalid ranges as hidden on the frontend.

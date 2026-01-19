@@ -142,6 +142,7 @@
             var end = attributes.end;
             var showPlaceholder = attributes.showPlaceholder;
             var placeholderText = attributes.placeholderText;
+            var deleteAfterEnd = attributes.deleteAfterEnd;
             var rangeWarningState = useState(false);
             var rangeWarning = rangeWarningState[0];
             var setRangeWarning = rangeWarningState[1];
@@ -327,6 +328,11 @@
                     el(
                         PanelBody,
                         { title: __('Visibility Options', 'scheduled-content-block'), initialOpen: false },
+                        el(ToggleControl, {
+                            label: __('Automatically delete block once the end date has passed.', 'scheduled-content-block'),
+                            checked: !!deleteAfterEnd,
+                            onChange: function (v) { setAttributes({ deleteAfterEnd: !!v }); }
+                        }),
                         el(ToggleControl, {
                             label: __('Show a placeholder message when hidden', 'scheduled-content-block'),
                             checked: !!showPlaceholder,

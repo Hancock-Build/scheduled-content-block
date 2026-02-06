@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Scheduled Content Block
  * Description: A simple container block that enables the easy scheduleing of content on WordPress pages or posts.
- * Version: 1.0.3
+ * Version: 1.1.0
  * Requires PHP: 8.2
  * Author: h.b Plugins
  * Author URI: https://hancock.build
@@ -19,6 +19,8 @@ define( 'SCBLK_OPTION_VISIBILITY', 'scblk_visibility_roles' );
 define( 'SCBLK_OPTION_BREEZE_ENABLE', 'scblk_breeze_enable' );
 define( 'SCBLK_META_BREEZE_EVENTS', '_scblk_breeze_events' );
 define( 'SCBLK_CRON_HOOK', 'scblk_breeze_cache_purge' );
+define( 'SCBLK_META_DELETE_EVENTS', '_scblk_delete_events' );
+define( 'SCBLK_DELETE_CRON_HOOK', 'scblk_delete_expired_blocks' );
 
 /**
  * Retrieve a plugin option while falling back to a default value.
@@ -37,6 +39,18 @@ function scblk_get_option( $option, $default ) {
  */
 function scblk_get_breeze_events_meta( $post_id ) {
         $events = get_post_meta( $post_id, SCBLK_META_BREEZE_EVENTS, true );
+        if ( empty( $events ) || ! is_array( $events ) ) {
+                return array();
+        }
+
+        return $events;
+}
+
+/**
+ * Fetch scheduled delete events stored in post meta.
+ */
+function scblk_get_delete_events_meta( $post_id ) {
+        $events = get_post_meta( $post_id, SCBLK_META_DELETE_EVENTS, true );
         if ( empty( $events ) || ! is_array( $events ) ) {
                 return array();
         }
@@ -83,6 +97,7 @@ function scblk_render_callback( $attributes, $content, $block ) {
 		'end'              => '',
                 'showPlaceholder'  => false,
                 'placeholderText'  => '',
+                'deleteAfterEnd'   => false,
         );
 	$atts = wp_parse_args( $attributes, $defaults );
 
@@ -173,6 +188,169 @@ function scblk_schedule_badge_html( $atts, $is_editor ) {
 }
 
 /* =======================================================
+ *  Optional block deletion after schedule end
+ * =======================================================*/
+function scblk_remove_expired_blocks( $blocks, $now, &$changed ) {
+        $filtered = array();
+        foreach ( $blocks as $block ) {
+                if ( empty( $block['blockName'] ) ) {
+                        $filtered[] = $block;
+                        continue;
+                }
+                if ( $block['blockName'] === 'h-b/scheduled-container' ) {
+                        $atts = isset( $block['attrs'] ) ? $block['attrs'] : array();
+                        if ( ! empty( $atts['deleteAfterEnd'] ) && ! empty( $atts['end'] ) ) {
+                                $end_ts = scblk_parse_site_ts( $atts['end'] );
+                                if ( $end_ts !== null && $end_ts <= $now ) {
+                                        $changed = true;
+                                        continue;
+                                }
+                        }
+                }
+                if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+                        $inner_changed = false;
+                        $block['innerBlocks'] = scblk_remove_expired_blocks( $block['innerBlocks'], $now, $inner_changed );
+                        if ( $inner_changed ) {
+                                $changed = true;
+                        }
+                }
+                $filtered[] = $block;
+        }
+        return $filtered;
+}
+
+function scblk_remove_expired_blocks_from_content( $content, $now ) {
+        if ( empty( $content ) || ! function_exists( 'parse_blocks' ) || ! function_exists( 'serialize_blocks' ) ) {
+                return array( $content, false );
+        }
+        $blocks = parse_blocks( $content );
+        $changed = false;
+        $filtered = scblk_remove_expired_blocks( $blocks, $now, $changed );
+        if ( ! $changed ) {
+                return array( $content, false );
+        }
+        return array( serialize_blocks( $filtered ), true );
+}
+
+function scblk_schedule_delete_events( $post_id, $post, $update ) {
+        if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) return;
+        if ( wp_is_post_revision( $post_id ) || 'trash' === $post->post_status ) return;
+
+        $content = $post->post_content;
+        if ( empty( $content ) ) {
+                scblk_delete_unschedule_for_post( $post_id );
+                return;
+        }
+
+        if ( ! function_exists( 'parse_blocks' ) ) {
+                return;
+        }
+
+        $blocks = parse_blocks( $content );
+        $boundaries = array();
+        $now = time();
+        $has_expired = false;
+
+        $walk = function( $blocks ) use ( &$walk, &$boundaries, $now, &$has_expired ) {
+                foreach ( $blocks as $b ) {
+                        if ( empty( $b['blockName'] ) ) continue;
+                        if ( $b['blockName'] === 'h-b/scheduled-container' ) {
+                                $atts = isset( $b['attrs'] ) ? $b['attrs'] : array();
+                                if ( ! empty( $atts['deleteAfterEnd'] ) && ! empty( $atts['end'] ) ) {
+                                        $ts = scblk_parse_site_ts( $atts['end'] );
+                                        if ( $ts !== null ) {
+                                                if ( $ts > $now ) {
+                                                        $boundaries[] = $ts;
+                                                } else {
+                                                        $has_expired = true;
+                                                }
+                                        }
+                                }
+                        }
+                        if ( ! empty( $b['innerBlocks'] ) && is_array( $b['innerBlocks'] ) ) {
+                                $walk( $b['innerBlocks'] );
+                        }
+                }
+        };
+
+        $walk( $blocks );
+
+        if ( $has_expired && function_exists( 'serialize_blocks' ) ) {
+                $changed = false;
+                $filtered = scblk_remove_expired_blocks( $blocks, $now, $changed );
+                if ( $changed ) {
+                        remove_action( 'save_post', 'scblk_schedule_delete_events', 10 );
+                        wp_update_post( array(
+                                'ID' => $post_id,
+                                'post_content' => serialize_blocks( $filtered ),
+                        ) );
+                        add_action( 'save_post', 'scblk_schedule_delete_events', 10, 3 );
+                }
+        }
+
+        scblk_delete_unschedule_for_post( $post_id );
+
+        $scheduled = array();
+        foreach ( $boundaries as $ts ) {
+                if ( ! wp_next_scheduled( SCBLK_DELETE_CRON_HOOK, array( $post_id, $ts ) ) ) {
+                        wp_schedule_single_event( $ts, SCBLK_DELETE_CRON_HOOK, array( $post_id, $ts ) );
+                        $scheduled[] = array( 'ts' => $ts );
+                }
+        }
+
+        if ( ! empty( $scheduled ) ) {
+                update_post_meta( $post_id, SCBLK_META_DELETE_EVENTS, $scheduled );
+        } else {
+                delete_post_meta( $post_id, SCBLK_META_DELETE_EVENTS );
+        }
+}
+add_action( 'save_post', 'scblk_schedule_delete_events', 10, 3 );
+
+function scblk_delete_unschedule_for_post( $post_id ) {
+        $events = scblk_get_delete_events_meta( $post_id );
+        if ( empty( $events ) || ! is_array( $events ) ) {
+                delete_post_meta( $post_id, SCBLK_META_DELETE_EVENTS );
+                return;
+        }
+        foreach ( $events as $e ) {
+                $ts = isset( $e['ts'] ) ? (int) $e['ts'] : 0;
+                if ( $ts > 0 ) {
+                        $next = wp_next_scheduled( SCBLK_DELETE_CRON_HOOK, array( $post_id, $ts ) );
+                        if ( $next ) {
+                                wp_unschedule_event( $next, SCBLK_DELETE_CRON_HOOK, array( $post_id, $ts ) );
+                        }
+                }
+        }
+        delete_post_meta( $post_id, SCBLK_META_DELETE_EVENTS );
+}
+
+function scblk_handle_delete_expired_blocks( $post_id, $ts ) {
+        $post = get_post( $post_id );
+        if ( ! $post || empty( $post->post_content ) ) {
+                return;
+        }
+        list( $content, $changed ) = scblk_remove_expired_blocks_from_content( $post->post_content, time() );
+        if ( $changed ) {
+                remove_action( 'save_post', 'scblk_schedule_delete_events', 10 );
+                wp_update_post( array(
+                        'ID' => $post_id,
+                        'post_content' => $content,
+                ) );
+                add_action( 'save_post', 'scblk_schedule_delete_events', 10, 3 );
+        }
+
+        $events = scblk_get_delete_events_meta( $post_id );
+        if ( $events && is_array( $events ) ) {
+                $events = array_values( array_filter( $events, function( $e ) use ( $ts ) {
+                        return ! ( isset( $e['ts'] ) && (int) $e['ts'] === (int) $ts );
+                } ) );
+                if ( $events ) update_post_meta( $post_id, SCBLK_META_DELETE_EVENTS, $events );
+                else delete_post_meta( $post_id, SCBLK_META_DELETE_EVENTS );
+        }
+}
+add_action( SCBLK_DELETE_CRON_HOOK, 'scblk_handle_delete_expired_blocks', 10, 2 );
+
+/* =======================================================
  *  Optional Breeze integration (purge cache on start/end)
  * =======================================================*/
 
@@ -214,7 +392,7 @@ add_action( 'admin_init', function () {
                                 $enabled = (int) scblk_get_option( SCBLK_OPTION_BREEZE_ENABLE, 0 );
                                 echo '<label><input type="checkbox" name="' . esc_attr( SCBLK_OPTION_BREEZE_ENABLE ) . '" value="1" ' . checked( 1, $enabled, false ) . ' />';
                                 echo ' ' . esc_html__( 'Enable (purges site cache at each block’s start & end time).', 'scheduled-content-block' ) . '</label>';
-                                echo '<p class="description">' . esc_html__( 'Requires the Breeze plugin. Uses Breeze’s purge-all hook.', 'scheduled-content-block' ) . '</p>';
+                                        echo '<p class="description">' . esc_html__( 'Requires the Breeze plugin.', 'scheduled-content-block' ) . '</p>';
                         },
                         'scblk-settings',
                         'scblk_main'
@@ -226,7 +404,31 @@ add_action( 'admin_init', function () {
 function scblk_render_settings_page() {
 	?>
 	<div class="wrap">
-		<h1><?php esc_html_e( 'Scheduled Content', 'scheduled-content-block' ); ?></h1>
+                <style>
+                        .scblk-settings-card {
+                                max-width: 820px;
+                                background: #fff;
+                                border: 1px solid #e0e0e0;
+                                border-radius: 8px;
+                                padding: 20px 24px;
+                                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+                                margin-top: 16px;
+                        }
+                        .scblk-settings-card h1 {
+                                margin-top: 0;
+                        }
+                        .scblk-settings-card .form-table th {
+                                width: 260px;
+                        }
+                        .scblk-settings-card .description {
+                                margin-top: 6px;
+                        }
+                        .scblk-settings-footer {
+                                margin-top: 16px;
+                        }
+                </style>
+                <div class="scblk-settings-card">
+			<h1><?php esc_html_e( 'Scheduled Content Block Settings', 'scheduled-content-block' ); ?></h1>
 		<form method="post" action="options.php">
 			<?php
                         settings_fields( SCBLK_OPTION_GROUP );
@@ -234,18 +436,25 @@ function scblk_render_settings_page() {
                         submit_button();
 			?>
 		</form>
-		<?php if ( ! scblk_breeze_is_available() ) : ?>
-			<p><em><?php esc_html_e( 'Breeze plugin is not active; purging will be skipped even if enabled.', 'scheduled-content-block' ); ?></em></p>
-		<?php else : ?>
-			<p><em><?php esc_html_e( 'Tip: Re-save posts that contain Scheduled Container blocks to (re)register purge times.', 'scheduled-content-block' ); ?></em></p>
-		<?php endif; ?>
+                        <div class="scblk-settings-footer">
+                                <?php if ( ! scblk_breeze_is_available() ) : ?>
+                                        <p><em><?php esc_html_e( 'Breeze plugin is not active; purging will be skipped even if enabled.', 'scheduled-content-block' ); ?></em></p>
+                                <?php else : ?>
+                                        <p><em><?php esc_html_e( 'Tip: Re-save posts that contain Scheduled Container blocks to (re)register purge times.', 'scheduled-content-block' ); ?></em></p>
+                                <?php endif; ?>
+                        </div>
+                </div>
 	</div>
 	<?php
 }
 
 /** Default roles that can view content outside schedule. */
 function scblk_visibility_default_roles() {
-        return array_keys( wp_roles()->roles );
+        $roles = wp_roles();
+        if ( isset( $roles->roles['administrator'] ) ) {
+                return array( 'administrator' );
+        }
+        return array_keys( $roles->roles );
 }
 
 /** Sanitize roles option. */
@@ -417,12 +626,15 @@ register_deactivation_hook( __FILE__, function () {
                 'posts_per_page' => -1,
                 'fields'         => 'ids',
                 'meta_query'     => array(
+                        'relation' => 'OR',
                         array( 'key' => SCBLK_META_BREEZE_EVENTS ),
+                        array( 'key' => SCBLK_META_DELETE_EVENTS ),
                 ),
         ) );
         if ( $q->have_posts() ) {
                 foreach ( $q->posts as $pid ) {
                         scblk_breeze_unschedule_for_post( $pid );
+                        scblk_delete_unschedule_for_post( $pid );
                 }
         }
 });

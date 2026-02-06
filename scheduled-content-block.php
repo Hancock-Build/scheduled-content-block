@@ -404,6 +404,30 @@ add_action( 'admin_init', function () {
 function scblk_render_settings_page() {
 	?>
 	<div class="wrap">
+                <style>
+                        .scblk-settings-card {
+                                max-width: 820px;
+                                background: #fff;
+                                border: 1px solid #e0e0e0;
+                                border-radius: 8px;
+                                padding: 20px 24px;
+                                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+                                margin-top: 16px;
+                        }
+                        .scblk-settings-card h1 {
+                                margin-top: 0;
+                        }
+                        .scblk-settings-card .form-table th {
+                                width: 260px;
+                        }
+                        .scblk-settings-card .description {
+                                margin-top: 6px;
+                        }
+                        .scblk-settings-footer {
+                                margin-top: 16px;
+                        }
+                </style>
+                <div class="scblk-settings-card">
 		<h1><?php esc_html_e( 'Scheduled Content', 'scheduled-content-block' ); ?></h1>
 		<form method="post" action="options.php">
 			<?php
@@ -412,18 +436,25 @@ function scblk_render_settings_page() {
                         submit_button();
 			?>
 		</form>
-		<?php if ( ! scblk_breeze_is_available() ) : ?>
-			<p><em><?php esc_html_e( 'Breeze plugin is not active; purging will be skipped even if enabled.', 'scheduled-content-block' ); ?></em></p>
-		<?php else : ?>
-			<p><em><?php esc_html_e( 'Tip: Re-save posts that contain Scheduled Container blocks to (re)register purge times.', 'scheduled-content-block' ); ?></em></p>
-		<?php endif; ?>
+                        <div class="scblk-settings-footer">
+                                <?php if ( ! scblk_breeze_is_available() ) : ?>
+                                        <p><em><?php esc_html_e( 'Breeze plugin is not active; purging will be skipped even if enabled.', 'scheduled-content-block' ); ?></em></p>
+                                <?php else : ?>
+                                        <p><em><?php esc_html_e( 'Tip: Re-save posts that contain Scheduled Container blocks to (re)register purge times.', 'scheduled-content-block' ); ?></em></p>
+                                <?php endif; ?>
+                        </div>
+                </div>
 	</div>
 	<?php
 }
 
 /** Default roles that can view content outside schedule. */
 function scblk_visibility_default_roles() {
-        return array_keys( wp_roles()->roles );
+        $roles = wp_roles();
+        if ( isset( $roles->roles['administrator'] ) ) {
+                return array( 'administrator' );
+        }
+        return array_keys( $roles->roles );
 }
 
 /** Sanitize roles option. */

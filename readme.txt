@@ -31,6 +31,8 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 
 = 1.1.0 =
 * Add an optional per-block setting to delete scheduled blocks after the end date passes.
+* Default scheduled-content visibility to administrators only.
+* Refresh the settings screen layout with cleaner styling.
 
 = 1.0.3 =
 * Fix Cover blocks inside scheduled containers so wide alignment options are available.

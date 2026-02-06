@@ -392,7 +392,7 @@ add_action( 'admin_init', function () {
                                 $enabled = (int) scblk_get_option( SCBLK_OPTION_BREEZE_ENABLE, 0 );
                                 echo '<label><input type="checkbox" name="' . esc_attr( SCBLK_OPTION_BREEZE_ENABLE ) . '" value="1" ' . checked( 1, $enabled, false ) . ' />';
                                 echo ' ' . esc_html__( 'Enable (purges site cache at each block’s start & end time).', 'scheduled-content-block' ) . '</label>';
-                                echo '<p class="description">' . esc_html__( 'Requires the Breeze plugin. Uses Breeze’s purge-all hook.', 'scheduled-content-block' ) . '</p>';
+                                        echo '<p class="description">' . esc_html__( 'Requires the Breeze plugin.', 'scheduled-content-block' ) . '</p>';
                         },
                         'scblk-settings',
                         'scblk_main'
@@ -428,7 +428,7 @@ function scblk_render_settings_page() {
                         }
                 </style>
                 <div class="scblk-settings-card">
-		<h1><?php esc_html_e( 'Scheduled Content', 'scheduled-content-block' ); ?></h1>
+			<h1><?php esc_html_e( 'Scheduled Content Block Settings', 'scheduled-content-block' ); ?></h1>
 		<form method="post" action="options.php">
 			<?php
                         settings_fields( SCBLK_OPTION_GROUP );

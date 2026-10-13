@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Scheduled Content Block
  * Description: A simple container block that enables the easy scheduleing of content on WordPress pages or posts.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Requires PHP: 8.2
  * Author: h.b Plugins
  * Author URI: https://hancock.build
@@ -21,6 +21,9 @@ define( 'SCBLK_META_BREEZE_EVENTS', '_scblk_breeze_events' );
 define( 'SCBLK_CRON_HOOK', 'scblk_breeze_cache_purge' );
 define( 'SCBLK_META_DELETE_EVENTS', '_scblk_delete_events' );
 define( 'SCBLK_DELETE_CRON_HOOK', 'scblk_delete_expired_blocks' );
+define( 'SCBLK_OPTION_AI_ENABLE', 'scblk_ai_enable' );
+
+require_once __DIR__ . '/includes/ai.php';
 
 /**
  * Retrieve a plugin option while falling back to a default value.
@@ -71,7 +74,13 @@ add_action( 'init', function() {
  * Inline the editor script to avoid HTTP fetch issues (e.g. WAF/404 serving HTML).
  */
 add_action( 'enqueue_block_editor_assets', function () {
-        $deps = array( 'wp-blocks', 'wp-element', 'wp-components', 'wp-editor', 'wp-i18n', 'wp-block-editor' );
+        wp_enqueue_script( 'scblk-ai-editor', SCBLK_PLUGIN_URL . 'block/ai.js', array( 'wp-blocks', 'wp-element', 'wp-components', 'wp-i18n', 'wp-data', 'wp-api-fetch' ), filemtime( SCBLK_PLUGIN_DIR . 'block/ai.js' ), true );
+        wp_localize_script( 'scblk-ai-editor', 'scblkAISettings', array(
+                'enabled'   => (bool) get_option( SCBLK_OPTION_AI_ENABLE, false ),
+                'available' => function_exists( 'wp_ai_client_prompt' ),
+                'canPrompt' => current_user_can( 'prompt_ai' ),
+        ) );
+        $deps = array( 'wp-blocks', 'wp-element', 'wp-components', 'wp-editor', 'wp-i18n', 'wp-block-editor', 'scblk-ai-editor' );
         $handle = 'scblk-editor';
         $path   = SCBLK_PLUGIN_DIR . 'block/editor.js';
         $url    = SCBLK_PLUGIN_URL . 'block/editor.js';
@@ -376,7 +385,19 @@ add_action( 'admin_init', function () {
                 'sanitize_callback' => function( $v ) { return ( $v === '1' || $v === 1 || $v === true ) ? 1 : 0; },
                 'default' => 0,
         ) );
+        register_setting( SCBLK_OPTION_GROUP, SCBLK_OPTION_AI_ENABLE, array(
+                'type' => 'boolean',
+                'sanitize_callback' => 'rest_sanitize_boolean',
+                'default' => false,
+        ) );
         add_settings_section( 'scblk_main', '', '__return_false', 'scblk-settings' );
+        add_settings_field(
+                'scblk_ai_enable',
+                __( 'AI block creation', 'scheduled-content-block' ),
+                'scblk_ai_settings_field',
+                'scblk-settings',
+                'scblk_main'
+        );
         add_settings_field(
                 'scblk_visibility_roles',
                 __( 'Roles allowed outside schedule', 'scheduled-content-block' ),

@@ -206,6 +206,11 @@
                 el(
                     InspectorControls,
                     null,
+                    el(wp.scblkAIPanel, {
+                        clientId: props.clientId,
+                        setAttributes: setAttributes,
+                        formatReadable: formatReadable
+                    }),
                     el(
                         PanelBody,
                         { title: __('Display Schedule', 'scheduled-content-block'), initialOpen: true },

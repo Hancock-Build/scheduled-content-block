@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Scheduled Content Block
- * Description: A simple container block that enables the easy scheduleing of content on WordPress pages or posts.
- * Version: 1.1.0
+ * Description: A simple container block that enables the easy scheduling of content on WordPress pages or posts.
+ * Version: 2.0.0
  * Requires PHP: 8.2
  * Author: h.b Plugins
  * Author URI: https://hancock.build
@@ -68,24 +68,27 @@ add_action( 'init', function() {
 } );
 
 /**
- * Inline the editor script to avoid HTTP fetch issues (e.g. WAF/404 serving HTML).
+ * Load scheduling helpers and controls only in the block editor.
  */
 add_action( 'enqueue_block_editor_assets', function () {
-        $deps = array( 'wp-blocks', 'wp-element', 'wp-components', 'wp-editor', 'wp-i18n', 'wp-block-editor' );
+        $deps   = array( 'wp-blocks', 'wp-element', 'wp-components', 'wp-editor', 'wp-i18n', 'wp-block-editor', 'wp-date' );
         $handle = 'scblk-editor';
         $path   = SCBLK_PLUGIN_DIR . 'block/editor.js';
         $url    = SCBLK_PLUGIN_URL . 'block/editor.js';
 
         if ( file_exists( $path ) ) {
-                $version = filemtime( $path ) ?: '1.2.0';
+                $version = '2.0.0-' . filemtime( $path );
                 wp_enqueue_script( $handle, $url, $deps, $version, true );
         } else {
-                wp_register_script( $handle, false, $deps, '1.2.0', true );
+                wp_register_script( $handle, false, $deps, '2.0.0', true );
                 wp_enqueue_script( $handle );
 
                 $fallback_js = "(function(wp){var el=wp.element.createElement,be=wp.blockEditor||wp.editor;var Inner=be.InnerBlocks;wp.blocks.registerBlockType('h-b/scheduled-container',{edit:function(){return el('div',null,'Scheduled Container (inline fallback)');},save:function(){return el(Inner.Content,null);}});})(window.wp);";
                 wp_add_inline_script( $handle, $fallback_js );
         }
+        wp_add_inline_script( $handle, 'window.scblkEditorSettings = ' . wp_json_encode( array(
+                'visitorBypass' => in_array( 'visitor', (array) scblk_get_option( SCBLK_OPTION_VISIBILITY, scblk_visibility_default_roles() ), true ),
+        ) ) . ';', 'before' );
 });
 
 /* -------------------------------------------------------
@@ -208,11 +211,25 @@ function scblk_remove_expired_blocks( $blocks, $now, &$changed ) {
                         }
                 }
                 if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
-                        $inner_changed = false;
-                        $block['innerBlocks'] = scblk_remove_expired_blocks( $block['innerBlocks'], $now, $inner_changed );
-                        if ( $inner_changed ) {
-                                $changed = true;
+                        // Each null in innerContent corresponds to one child. Remove both
+                        // together so a deleted child cannot consume a surviving sibling's slot.
+                        $children = array();
+                        $removed = array();
+                        foreach ( $block['innerBlocks'] as $index => $child ) {
+                                $inner_changed = false;
+                                $kept = scblk_remove_expired_blocks( array( $child ), $now, $inner_changed );
+                                if ( $inner_changed ) $changed = true;
+                                if ( $kept ) $children[] = $kept[0];
+                                else $removed[ $index ] = true;
                         }
+                        $block['innerBlocks'] = $children;
+                        $child_index = 0;
+                        $fragments = array();
+                        foreach ( $block['innerContent'] as $fragment ) {
+                                if ( null === $fragment && isset( $removed[ $child_index++ ] ) ) continue;
+                                $fragments[] = $fragment;
+                        }
+                        $block['innerContent'] = $fragments;
                 }
                 $filtered[] = $block;
         }
@@ -230,6 +247,17 @@ function scblk_remove_expired_blocks_from_content( $content, $now ) {
                 return array( $content, false );
         }
         return array( serialize_blocks( $filtered ), true );
+}
+
+/** Save deletion through WordPress so normal revision history remains available. */
+function scblk_save_deleted_content( $post_id, $content ) {
+        if ( function_exists( 'wp_save_post_revision' ) ) wp_save_post_revision( $post_id );
+        remove_action( 'save_post', 'scblk_schedule_delete_events', 10 );
+        try {
+                return wp_update_post( array( 'ID' => $post_id, 'post_content' => wp_slash( $content ) ), true );
+        } finally {
+                add_action( 'save_post', 'scblk_schedule_delete_events', 10, 3 );
+        }
 }
 
 function scblk_schedule_delete_events( $post_id, $post, $update ) {
@@ -279,12 +307,7 @@ function scblk_schedule_delete_events( $post_id, $post, $update ) {
                 $changed = false;
                 $filtered = scblk_remove_expired_blocks( $blocks, $now, $changed );
                 if ( $changed ) {
-                        remove_action( 'save_post', 'scblk_schedule_delete_events', 10 );
-                        wp_update_post( array(
-                                'ID' => $post_id,
-                                'post_content' => serialize_blocks( $filtered ),
-                        ) );
-                        add_action( 'save_post', 'scblk_schedule_delete_events', 10, 3 );
+                        scblk_save_deleted_content( $post_id, serialize_blocks( $filtered ) );
                 }
         }
 
@@ -331,12 +354,7 @@ function scblk_handle_delete_expired_blocks( $post_id, $ts ) {
         }
         list( $content, $changed ) = scblk_remove_expired_blocks_from_content( $post->post_content, time() );
         if ( $changed ) {
-                remove_action( 'save_post', 'scblk_schedule_delete_events', 10 );
-                wp_update_post( array(
-                        'ID' => $post_id,
-                        'post_content' => $content,
-                ) );
-                add_action( 'save_post', 'scblk_schedule_delete_events', 10, 3 );
+                scblk_save_deleted_content( $post_id, $content );
         }
 
         $events = scblk_get_delete_events_meta( $post_id );
@@ -459,7 +477,7 @@ function scblk_visibility_default_roles() {
 
 /** Sanitize roles option. */
 function scblk_sanitize_visibility_roles( $roles ) {
-        $valid = scblk_visibility_default_roles();
+        $valid = array_keys( wp_roles()->roles );
         $valid[] = 'visitor';
         if ( ! is_array( $roles ) ) return scblk_visibility_default_roles();
         $roles = array_map( 'sanitize_key', $roles );
@@ -470,6 +488,7 @@ function scblk_sanitize_visibility_roles( $roles ) {
 function scblk_visibility_roles_field() {
         $value = scblk_get_option( SCBLK_OPTION_VISIBILITY, scblk_visibility_default_roles() );
         $roles = wp_roles()->role_names;
+        echo '<input type="hidden" name="' . esc_attr( SCBLK_OPTION_VISIBILITY ) . '[]" value="" />';
         foreach ( $roles as $slug => $name ) {
                 echo '<label><input type="checkbox" name="' . esc_attr( SCBLK_OPTION_VISIBILITY ) . '[]" value="' . esc_attr( $slug ) . '" ' . checked( in_array( $slug, $value, true ), true, false ) . ' /> ' . esc_html( $name ) . '</label><br />';
         }

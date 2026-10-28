@@ -19,3 +19,29 @@
 .scblk-datetime-row .components-text-control__input {
   width: 100%;
 }
+
+.scblk-datetime-group {
+  margin: 16px 0;
+  padding: 0;
+  border: 0;
+}
+
+.scblk-datetime-group legend {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.scblk-datetime-row > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.scblk-datetime-row label {
+  display: block;
+}
+
+.scblk-visitor-preview {
+  border: 1px solid #757575;
+  padding: 12px;
+  margin-bottom: 8px;
+}

@@ -19,26 +19,9 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 * Simple container block, allowing you to display content within the block during a specific timeframe.
 * Optional integration with the Breeze caching plugin, purging the site's cache when content is scheduled to become active or inactive.
 * Change who is able to see scheduled content on your site with role-based controls, including custom roles.
-* Clear start/end boundaries independently and see the site timezone beside the date controls.
-* Editor-only schedule status and visitor visibility preview at the current or a chosen site time.
-* Optional automatic deletion of an expired container, with nested sibling preservation.
-
-== Scheduling and preview ==
-
-Dates and times use the WordPress site timezone, regardless of your browser timezone. Stored timestamps are absolute UTC instants. Changing the site timezone changes their displayed local time, not the scheduled instant. Leave start or end empty for an open boundary. Clearing a date clears the entire boundary; an empty time on a selected date uses midnight.
-
-Invalid ranges are shown as errors without changing your dates. Visitors see the hidden state for invalid schedules unless they have been allowed to bypass schedules in settings. A nonexistent local time during the spring daylight saving jump is rejected. During the repeated hour in autumn, the earlier occurrence is used. Use a named city timezone in WordPress settings to follow daylight saving rules; fixed UTC offsets stay fixed.
-
-Select a container to see its status: No schedule, Upcoming, Active, Expired, or Invalid schedule. Expand Visitor Preview (editor only), enable Preview visitor visibility, and optionally select a date/time in the site timezone. Use current time returns to a live preview. The preview respects the site setting that lets logged-out visitors bypass schedules. Each preview applies to the selected container; nested containers have their own schedules. It is a visibility simulation, not a full frontend theme rendering.
-
-Preview controls, status labels, and preview times are editor-only. They are not saved in the block or displayed on the frontend. Turn preview off to edit content hidden by the simulation.
-
-== Automatic deletion and recovery ==
-
-Automatic deletion is off by default and requires an end date. When enabled, it removes the container and all its contents from the saved post after expiry. Nested siblings are retained. An already expired container with deletion enabled is also removed when the post is saved. Deletion uses WP-Cron, so execution may be delayed on sites with little traffic.
-
-Before deletion, the plugin requests a WordPress revision. Recovery depends on revisions being enabled and retained for that post type. In the revision history, locate the content from before deletion, copy it back into the editor, and turn automatic deletion off or set a future end date before saving it. Restoring an expired revision unchanged can delete the block again. Keep backups for content you need to retain permanently.
-
+* Clear start/end times displayed in the editor.
+* Preview any scheduled content in the WordPress editor.
+* Option to automatically delete any scheduled blocks once the date/time has expired.
 
 == Screenshots ==
 

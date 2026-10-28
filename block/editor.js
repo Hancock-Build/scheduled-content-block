@@ -1,363 +1,141 @@
 (function (wp) {
-    var registerBlockType = wp.blocks.registerBlockType;
-    var __ = wp.i18n.__;
     var el = wp.element.createElement;
-    var Fragment = wp.element.Fragment;
-    var useEffect = wp.element.useEffect;
+    var __ = wp.i18n.__;
+    var sprintf = wp.i18n.sprintf;
     var useState = wp.element.useState;
+    var useEffect = wp.element.useEffect;
+    var be = wp.blockEditor;
+    var c = wp.components;
+    var schedule = window.scblkSchedule;
 
-    var be = wp.blockEditor || wp.editor;
-    var InspectorControls = be.InspectorControls;
-    var InnerBlocks = be.InnerBlocks;
-    var BlockControls = be.BlockControls;
-    var useBlockProps = be.useBlockProps;
-    var useInnerBlocksProps = be.useInnerBlocksProps;
+    var labels = {
+        unscheduled: __('No schedule', 'scheduled-content-block'),
+        upcoming: __('Upcoming', 'scheduled-content-block'),
+        active: __('Active', 'scheduled-content-block'),
+        expired: __('Expired', 'scheduled-content-block'),
+        invalid: __('Invalid schedule', 'scheduled-content-block')
+    };
 
-    var components = wp.components;
-    var PanelBody = components.PanelBody;
-    var ToggleControl = components.ToggleControl;
-    var TextareaControl = components.TextareaControl;
-    var ToolbarGroup = components.ToolbarGroup;
-    var ToolbarButton = components.ToolbarButton;
-    var Notice = components.Notice;
-
-    var ALLOWED_BLOCKS = undefined; // allow any
-    var TEMPLATE = []; // none
-
-    function toISOZ(val){
-        if (!val) return '';
-        var d = new Date(val);
-        if (isNaN(d.getTime())) return '';
-        var iso = d.toISOString();
-        return iso.replace(/\.\d{3}Z$/, 'Z');
-    }
-
-    function parseOffsetMinutes(tz) {
-        var match = tz && tz.match(/^UTC([+-]\d{1,2})(?::(\d{2}))?$/);
-        if (!match) return null;
-        var sign = match[1][0] === '-' ? -1 : 1;
-        var hours = parseInt(match[1].slice(1), 10);
-        var mins = match[2] ? parseInt(match[2], 10) : 0;
-        return sign * (hours * 60 + mins);
-    }
-
-    function isoToLocalParts(iso) {
-        if (!iso) return { date: '', time: '' };
-        var tz = getSiteTimeZone();
-        if (wp.date && wp.date.moment) {
-            var m = wp.date.moment(iso);
-            var off = parseOffsetMinutes(tz);
-            m = off === null ? m.tz(tz) : m.utcOffset(off);
-            if (!m.isValid()) return { date: '', time: '' };
-            return { date: m.format('YYYY-MM-DD'), time: m.format('HH:mm') };
-        }
-        var d = new Date(iso);
-        if (isNaN(d.getTime())) return { date: '', time: '' };
-        var pad = function (n) { return ('0' + n).slice(-2); };
-        return {
-            date: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()),
-            time: pad(d.getHours()) + ':' + pad(d.getMinutes())
-        };
-    }
-
-    function combineLocal(dateStr, timeStr) {
-        if (!dateStr && !timeStr) return '';
-        var tz = getSiteTimeZone();
-        if (wp.date && wp.date.moment) {
-            var off = parseOffsetMinutes(tz);
-            var moment = wp.date.moment;
-            if (!dateStr) {
-                var now = moment();
-                now = off === null ? now.tz(tz) : now.utcOffset(off);
-                dateStr = now.format('YYYY-MM-DD');
-            }
-            timeStr = timeStr || '00:00';
-            var m = moment(dateStr + 'T' + timeStr);
-            m = off === null ? m.tz(tz, true) : m.utcOffset(off, true);
-            return m.utc().format('YYYY-MM-DDTHH:mm:ss[Z]');
-        }
-        if (!dateStr) {
-            var nowDate = new Date();
-            dateStr = nowDate.getFullYear() + '-' + ('0' + (nowDate.getMonth() + 1)).slice(-2) + '-' + ('0' + nowDate.getDate()).slice(-2);
-        }
-        timeStr = timeStr || '00:00';
-        return toISOZ(dateStr + 'T' + timeStr);
-    }
-
-    function isoToDate(iso) {
-        if (!iso) return null;
-        var d = new Date(iso);
-        if (isNaN(d.getTime())) return null;
-        return d;
-    }
-
-    function ensureEndNotBeforeStart(startIso, endIso) {
-        var startDate = isoToDate(startIso);
-        var endDate = isoToDate(endIso);
-        if (!startDate || !endDate) {
-            return { end: endIso, clamped: false };
-        }
-        if (endDate.getTime() < startDate.getTime()) {
-            return { end: startIso, clamped: true };
-        }
-        return { end: endIso, clamped: false };
-    }
-
-    function getSiteTimeZone() {
-        try {
-            if (wp.date && (wp.date.__experimentalGetSettings || wp.date.getSettings)) {
-                var settings = wp.date.__experimentalGetSettings ? wp.date.__experimentalGetSettings() : wp.date.getSettings();
-                if (settings && settings.timezone && settings.timezone.string) {
-                    return settings.timezone.string;
-                }
-            }
-        } catch (e) {}
-        // Fallback: browser TZ or UTC
-        try {
-            return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-        } catch (e) {
-            return 'UTC';
-        }
-    }
-
-    function formatReadable(iso) {
+    function readable(iso) {
         if (!iso) return '—';
-        var tz = getSiteTimeZone();
-        try {
-            var d = new Date(iso);
-            var datePart = new Intl.DateTimeFormat(undefined, { timeZone: tz, month: 'long', day: 'numeric', year: 'numeric' }).format(d);
-            var timePart = new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
-            timePart = timePart.toLowerCase().replace(' ', '');
-            return datePart + ' at ' + timePart;
-        } catch (e) {
-            return iso;
-        }
+        var value = wp.date.getDate(iso);
+        return isNaN(value.getTime()) ? __('Invalid date', 'scheduled-content-block') : wp.date.dateI18n(wp.date.getSettings().formats.datetime, value);
     }
 
-    registerBlockType('h-b/scheduled-container', {
+    wp.blocks.registerBlockType('h-b/scheduled-container', {
         edit: function (props) {
-            var attributes = props.attributes;
+            var a = props.attributes;
             var setAttributes = props.setAttributes;
-            var start = attributes.start;
-            var end = attributes.end;
-            var showPlaceholder = attributes.showPlaceholder;
-            var placeholderText = attributes.placeholderText;
-            var deleteAfterEnd = attributes.deleteAfterEnd;
-            var rangeWarningState = useState(false);
-            var rangeWarning = rangeWarningState[0];
-            var setRangeWarning = rangeWarningState[1];
+            var previewState = useState(false);
+            var preview = previewState[0];
+            var previewTimeState = useState('');
+            var previewTime = previewTimeState[0];
+            var nowState = useState(Date.now());
+            var errorsState = useState({});
+            var errors = errorsState[0];
+            var setErrors = errorsState[1];
+            var blockProps = be.useBlockProps({ className: 'scblk-editor-frame' });
+            var innerProps = be.useInnerBlocksProps({ className: 'scblk-editor-inner' }, { templateLock: false });
+            var prefix = 'scblk-' + props.clientId;
 
-            useEffect(function(){
-                if (
-                    !start &&
-                    !end &&
-                    showPlaceholder === false &&
-                    !placeholderText
-                ) {
-                    setAttributes({ start: toISOZ(new Date()) });
-                }
+            useEffect(function () {
+                var timer = setInterval(function () { nowState[1](Date.now()); }, 1000);
+                return function () { clearInterval(timer); };
             }, []);
 
-            useEffect(function(){
-                if (!start || !end) {
-                    return;
-                }
-                var adjustment = ensureEndNotBeforeStart(start, end);
-                if (adjustment.clamped && adjustment.end !== end) {
-                    setAttributes({ end: adjustment.end });
-                    setRangeWarning(true);
-                }
-            }, []);
+            var currentStatus = schedule.status(a, nowState[0]);
+            var previewResult = schedule.combine(previewTime.slice(0, 10), previewTime.slice(11));
+            var previewStatus = schedule.status(a, previewTime && !previewResult.error ? new Date(previewResult.iso).getTime() : nowState[0]);
+            var visitorBypass = !!window.scblkEditorSettings.visitorBypass;
+            var visible = visitorBypass || previewStatus === 'active' || previewStatus === 'unscheduled';
 
-            useEffect(function(){
-                if (!start || !end) {
-                    setRangeWarning(false);
-                    return;
-                }
-                var startDate = isoToDate(start);
-                var endDate = isoToDate(end);
-                if (startDate && endDate && endDate.getTime() > startDate.getTime()) {
-                    setRangeWarning(false);
-                }
-            }, [start, end]);
-
-            function scheduleLabel() {
-                return 'Start: ' + formatReadable(start) + ' | End: ' + formatReadable(end);
+            function fieldError(key, value) {
+                setErrors(function (previous) {
+                    var next = Object.assign({}, previous);
+                    next[key] = value;
+                    return next;
+                });
             }
 
-            var blockProps = useBlockProps({ className: 'scblk-editor-frame' });
-            var innerBlocksProps = useInnerBlocksProps(
-                { className: 'scblk-editor-inner' },
-                { allowedBlocks: ALLOWED_BLOCKS, template: TEMPLATE, templateLock: false }
-            );
+            function dateControls(key, title) {
+                var parts = schedule.parts(a[key]);
+                function update(day, time) {
+                    var result = schedule.combine(day, time);
+                    if (result.error) {
+                        fieldError(key, __('That local time does not exist in the site timezone. Choose another time.', 'scheduled-content-block'));
+                        return;
+                    }
+                    fieldError(key, '');
+                    var update = {};
+                    update[key] = result.iso;
+                    setAttributes(update);
+                }
+                return el('fieldset', { className: 'scblk-datetime-group' },
+                    el('legend', null, title),
+                    el('div', { className: 'scblk-datetime-row' },
+                        el('div', null,
+                            el('label', { htmlFor: prefix + '-' + key + '-date' }, __('Date', 'scheduled-content-block')),
+                            el('input', { id: prefix + '-' + key + '-date', type: 'date', value: parts.date,
+                                className: 'components-text-control__input',
+                                onChange: function (e) { update(e.target.value, parts.time); } })),
+                        el('div', null,
+                            el('label', { htmlFor: prefix + '-' + key + '-time' }, __('Time', 'scheduled-content-block')),
+                            el('input', { id: prefix + '-' + key + '-time', type: 'time', value: parts.time,
+                                className: 'components-text-control__input', disabled: !parts.date,
+                                onChange: function (e) { update(parts.date, e.target.value); } }))),
+                    el(c.Button, { variant: 'tertiary', disabled: !a[key], onClick: function () { update('', ''); } },
+                        key === 'start' ? __('Clear start', 'scheduled-content-block') : __('Clear end', 'scheduled-content-block')),
+                    errors[key] ? el(c.Notice, { status: 'error', isDismissible: false }, errors[key]) : null);
+            }
 
-            return el(
-                Fragment,
-                null,
-                el(
-                    BlockControls,
-                    null,
-                    el(
-                        ToolbarGroup,
-                        null,
-                        el(ToolbarButton, { icon: 'clock', label: __('Schedule Details', 'scheduled-content-block'), disabled: true })
-                    )
-                ),
-                el(
-                    InspectorControls,
-                    null,
-                    el(
-                        PanelBody,
-                        { title: __('Display Schedule', 'scheduled-content-block'), initialOpen: true },
-                        el('p', { className: 'components-help' }, __('Choose your start and end date for content to be displayed. Dates and times use the site timezone.', 'scheduled-content-block')),
-                        (function(){
-                            var sp = isoToLocalParts(start);
-                            return el('div', { className: 'scblk-datetime-group' },
-                                el('label', { className: 'components-base-control__label' }, __('Start', 'scheduled-content-block')),
-                                el('div', { className: 'scblk-datetime-row' },
-                                    el('input', {
-                                        type: 'date',
-                                        className: 'components-text-control__input',
-                                        value: sp.date,
-                                        onChange: function(e){
-                                            var nextStart = combineLocal(e.target.value, sp.time);
-                                            if (!nextStart) {
-                                                setAttributes({ start: '' });
-                                                setRangeWarning(false);
-                                                return;
-                                            }
-                                            var updates = { start: nextStart };
-                                            if (end) {
-                                                var adjustment = ensureEndNotBeforeStart(nextStart, end);
-                                                if (adjustment.clamped && adjustment.end !== end) {
-                                                    updates.end = adjustment.end;
-                                                    setRangeWarning(true);
-                                                }
-                                            }
-                                            setAttributes(updates);
-                                        }
-                                    }),
-                                    el('input', {
-                                        type: 'time',
-                                        className: 'components-text-control__input',
-                                        value: sp.time,
-                                        onChange: function(e){
-                                            var nextStart = combineLocal(sp.date, e.target.value);
-                                            if (!nextStart) {
-                                                setAttributes({ start: '' });
-                                                setRangeWarning(false);
-                                                return;
-                                            }
-                                            var updates = { start: nextStart };
-                                            if (end) {
-                                                var adjustment = ensureEndNotBeforeStart(nextStart, end);
-                                                if (adjustment.clamped && adjustment.end !== end) {
-                                                    updates.end = adjustment.end;
-                                                    setRangeWarning(true);
-                                                }
-                                            }
-                                            setAttributes(updates);
-                                        }
-                                    })
-                                )
-                            );
-                        })(),
-                        el('div', { style: { height: '10px' } }),
-                        (function(){
-                            var ep = isoToLocalParts(end);
-                            return el('div', { className: 'scblk-datetime-group' },
-                                el('label', { className: 'components-base-control__label' }, __('End', 'scheduled-content-block')),
-                                el('div', { className: 'scblk-datetime-row' },
-                                    el('input', {
-                                        type: 'date',
-                                        className: 'components-text-control__input',
-                                        value: ep.date,
-                                        onChange: function(e){
-                                            var nextEnd = combineLocal(e.target.value, ep.time);
-                                            if (!nextEnd) {
-                                                setAttributes({ end: '' });
-                                                setRangeWarning(false);
-                                                return;
-                                            }
-                                            var adjustment = ensureEndNotBeforeStart(start, nextEnd);
-                                            if (adjustment.clamped) {
-                                                if (adjustment.end !== end) {
-                                                    setAttributes({ end: adjustment.end });
-                                                }
-                                                if (start) {
-                                                    setRangeWarning(true);
-                                                }
-                                            } else {
-                                                setAttributes({ end: nextEnd });
-                                            }
-                                        }
-                                    }),
-                                    el('input', {
-                                        type: 'time',
-                                        className: 'components-text-control__input',
-                                        value: ep.time,
-                                        onChange: function(e){
-                                            var nextEnd = combineLocal(ep.date, e.target.value);
-                                            if (!nextEnd) {
-                                                setAttributes({ end: '' });
-                                                setRangeWarning(false);
-                                                return;
-                                            }
-                                            var adjustment = ensureEndNotBeforeStart(start, nextEnd);
-                                            if (adjustment.clamped) {
-                                                if (adjustment.end !== end) {
-                                                    setAttributes({ end: adjustment.end });
-                                                }
-                                                if (start) {
-                                                    setRangeWarning(true);
-                                                }
-                                            } else {
-                                                setAttributes({ end: nextEnd });
-                                            }
-                                        }
-                                    })
-                                )
-                            );
-                        })(),
-                        rangeWarning ? el(Notice, {
-                            status: 'warning',
-                            isDismissible: true,
-                            onRemove: function () { setRangeWarning(false); }
-                        }, __('The end time cannot be earlier than the start time. It has been adjusted to match the start.', 'scheduled-content-block')) : null
-                    ),
-                    el(
-                        PanelBody,
-                        { title: __('Visibility Options', 'scheduled-content-block'), initialOpen: false },
-                        el(ToggleControl, {
+            return el(wp.element.Fragment, null,
+                el(be.InspectorControls, null,
+                    el(c.PanelBody, { title: __('Display Schedule', 'scheduled-content-block'), initialOpen: true },
+                        el('p', null, sprintf(__('Site timezone: %s', 'scheduled-content-block'), schedule.timezone())),
+                        el('p', null, __('Leave a boundary empty for no start or no end. During the repeated hour when daylight saving ends, the earlier occurrence is used.', 'scheduled-content-block')),
+                        dateControls('start', __('Start', 'scheduled-content-block')),
+                        dateControls('end', __('End', 'scheduled-content-block')),
+                        currentStatus === 'invalid' ? el(c.Notice, { status: 'error', isDismissible: false },
+                            __('The end must be at or after the start, and both dates must be valid. Visitors will see the hidden state until you correct the schedule.', 'scheduled-content-block')) : null),
+                    el(c.PanelBody, { title: __('Visibility Options', 'scheduled-content-block'), initialOpen: false },
+                        el(c.ToggleControl, {
                             label: __('Automatically delete block once the end date has passed.', 'scheduled-content-block'),
-                            checked: !!deleteAfterEnd,
-                            onChange: function (v) { setAttributes({ deleteAfterEnd: !!v }); }
+                            checked: !!a.deleteAfterEnd, onChange: function (v) { setAttributes({ deleteAfterEnd: v }); },
+                            help: __('Deletes this container and everything inside it from the saved post. Revision recovery depends on WordPress revisions being enabled. Copy recovered content and turn deletion off before saving it again.', 'scheduled-content-block')
                         }),
-                        el(ToggleControl, {
+                        a.deleteAfterEnd && !a.end ? el(c.Notice, { status: 'warning', isDismissible: false },
+                            __('Set an end date to enable automatic deletion.', 'scheduled-content-block')) : null,
+                        el(c.ToggleControl, {
                             label: __('Show a placeholder message when hidden', 'scheduled-content-block'),
-                            checked: !!showPlaceholder,
-                            onChange: function (v) { setAttributes({ showPlaceholder: !!v }); }
+                            checked: !!a.showPlaceholder, onChange: function (v) { setAttributes({ showPlaceholder: v }); }
                         }),
-                        showPlaceholder ? el(TextareaControl, {
-                            label: __('Placeholder text', 'scheduled-content-block'),
-                            value: placeholderText,
+                        a.showPlaceholder ? el(c.TextareaControl, {
+                            label: __('Placeholder text', 'scheduled-content-block'), value: a.placeholderText,
                             onChange: function (v) { setAttributes({ placeholderText: v }); }
-                        }) : null
-                    )
-                ),
-                el(
-                    'div',
-                    blockProps,
-                    el(Notice, { status: 'info', isDismissible: false },
-                        el('strong', null, __('Scheduled Container', 'scheduled-content-block')),
-                        ': ' + scheduleLabel()
-                    ),
-                    el('div', innerBlocksProps)
-                )
-            );
+                        }) : null),
+                    el(c.PanelBody, { title: __('Visitor Preview (editor only)', 'scheduled-content-block'), initialOpen: false },
+                        el(c.ToggleControl, {
+                            label: __('Preview visitor visibility', 'scheduled-content-block'), checked: preview,
+                            onChange: previewState[1],
+                            help: __('Simulates this container for logged-out visitors inside the editor. Preview controls and status labels never appear on your website.', 'scheduled-content-block')
+                        }),
+                        preview ? el('div', null,
+                            el('label', { htmlFor: prefix + '-preview-time' }, __('Preview at site date and time', 'scheduled-content-block')),
+                            el('input', { id: prefix + '-preview-time', type: 'datetime-local', value: previewTime,
+                                onChange: function (e) { previewTimeState[1](e.target.value); } }),
+                            el(c.Button, { variant: 'tertiary', onClick: function () { previewTimeState[1](''); } }, __('Use current time', 'scheduled-content-block')),
+                            previewResult.error ? el(c.Notice, { status: 'error', isDismissible: false }, __('Choose a valid time in the site timezone.', 'scheduled-content-block')) : null,
+                            visitorBypass ? el('p', null, __('Your site settings allow visitors to bypass schedules, so this container remains visible.', 'scheduled-content-block')) : null) : null)),
+                el('div', blockProps,
+                    el(c.Notice, { status: currentStatus === 'invalid' ? 'warning' : 'info', isDismissible: false },
+                        el('strong', null, __('Scheduled Container', 'scheduled-content-block') + ': ' + labels[currentStatus]),
+                        el('div', null, sprintf(__('Start: %1$s | End: %2$s | Timezone: %3$s', 'scheduled-content-block'), readable(a.start), readable(a.end), schedule.timezone()))),
+                    preview ? el('div', { className: 'scblk-visitor-preview', role: 'status' },
+                        el('strong', null, __('Visitor preview', 'scheduled-content-block') + ': ' + labels[previewStatus]),
+                        el('p', null, __('This preview applies to this container’s schedule. Nested containers follow their own schedules.', 'scheduled-content-block')),
+                        !visible ? el('p', null, a.showPlaceholder ? a.placeholderText : __('Hidden — no content is shown to visitors.', 'scheduled-content-block')) : null) : null,
+                    el('div', { hidden: preview && !visible }, el('div', innerProps))));
         },
-        save: function () {
-            return el(InnerBlocks.Content, null);
-        }
+        save: function () { return el(be.InnerBlocks.Content, null); }
     });
 })(window.wp);

@@ -39,10 +39,6 @@ Automatic deletion is off by default and requires an end date. When enabled, it 
 
 Before deletion, the plugin requests a WordPress revision. Recovery depends on revisions being enabled and retained for that post type. In the revision history, locate the content from before deletion, copy it back into the editor, and turn automatic deletion off or set a future end date before saving it. Restoring an expired revision unchanged can delete the block again. Keep backups for content you need to retain permanently.
 
-== Upgrade notice ==
-
-= 2.0.0 =
-Role settings now accept every registered role. Date controls no longer silently adjust invalid ranges or assign a start date to unscheduled blocks. Existing block names, attributes, settings, and UTC timestamps remain compatible. Check invalid schedules in existing content; visitors continue to see the hidden state until corrected. Automatic deletion remains opt-in.
 
 == Screenshots ==
 
@@ -54,16 +50,15 @@ Role settings now accept every registered role. Date controls no longer silently
 == Changelog ==
 
 = 2.0.0 =
-* Fix role sanitization so built-in and custom roles can be saved; allow clearing all bypass roles.
-* Use the WordPress date API with an explicit dependency for consistent site timezone handling, including fixed offsets and daylight saving transitions.
-* Display the site timezone, add Clear start / Clear end, and report invalid ranges without changing the entered boundaries.
+* Used the WordPress date API with an explicit dependency for consistent site timezone handling, including fixed offsets and daylight saving transitions.
+* Plugin now displays whether the scheduled date/time is upcoming, active, or expired.
 * Keep new unscheduled blocks and cleared boundaries empty.
 * Preserve parent serialization and surviving siblings when deleting expired nested containers.
 * Request a pre-deletion WordPress revision and preserve literal backslashes when saving remaining content.
-* Add editor-only status and visitor visibility preview using the current or a chosen site time; preview state is never serialized.
+* Added editor-only status and visitor visibility preview using the current or a chosen site time.
 * Include scheduling helpers in the editor script to avoid a missing helper request crashing new or existing blocks; include the release version in its cache key.
-* Keep content editing available with a clear message if the visitor preview configuration cannot load.
-* Document scheduling behavior, upgrade compatibility, deletion recovery, and test procedures.
+* Plugin now keeps content editing available with a clear message if the visitor preview configuration cannot load.
+* Fixed role sanitization so built-in and custom roles can be saved; allow clearing all bypass roles.
 * Tested with WordPress 7.1.4 and PHP 8.2.
 
 = 1.1.0 =

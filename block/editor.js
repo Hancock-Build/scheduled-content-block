@@ -182,7 +182,7 @@
                 el('div', blockProps,
                     el(c.Notice, { status: currentStatus === 'invalid' ? 'warning' : 'info', isDismissible: false },
                         el('strong', null, __('Scheduled Container', 'scheduled-content-block') + ': ' + labels[currentStatus]),
-                        el('div', null, sprintf(__('Start: %1$s | End: %2$s | Timezone: %3$s', 'scheduled-content-block'), readable(a.start), readable(a.end), schedule.timezone()))),
+                        el('div', null, sprintf(__('Start: %1$s | End: %2$s', 'scheduled-content-block'), readable(a.start), readable(a.end)))),
                     preview ? el('div', { className: 'scblk-visitor-preview', role: 'status' },
                         el('strong', null, __('Visitor preview', 'scheduled-content-block') + ': ' + labels[previewStatus]),
                         el('p', null, __('This preview applies to this container’s schedule. Nested containers follow their own schedules.', 'scheduled-content-block')),

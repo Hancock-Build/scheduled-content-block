@@ -71,17 +71,13 @@ add_action( 'init', function() {
  * Load scheduling helpers and controls only in the block editor.
  */
 add_action( 'enqueue_block_editor_assets', function () {
-        $deps = array( 'wp-blocks', 'wp-element', 'wp-components', 'wp-editor', 'wp-i18n', 'wp-block-editor', 'wp-date', 'scblk-schedule' );
-        wp_enqueue_script( 'scblk-schedule', SCBLK_PLUGIN_URL . 'block/schedule.js', array( 'wp-date' ), '2.0.0', true );
-        wp_add_inline_script( 'scblk-schedule', 'window.scblkEditorSettings = ' . wp_json_encode( array(
-                'visitorBypass' => in_array( 'visitor', (array) scblk_get_option( SCBLK_OPTION_VISIBILITY, scblk_visibility_default_roles() ), true ),
-        ) ) . ';', 'before' );
+        $deps   = array( 'wp-blocks', 'wp-element', 'wp-components', 'wp-editor', 'wp-i18n', 'wp-block-editor', 'wp-date' );
         $handle = 'scblk-editor';
         $path   = SCBLK_PLUGIN_DIR . 'block/editor.js';
         $url    = SCBLK_PLUGIN_URL . 'block/editor.js';
 
         if ( file_exists( $path ) ) {
-                $version = filemtime( $path ) ?: '2.0.0';
+                $version = '2.0.0-' . filemtime( $path );
                 wp_enqueue_script( $handle, $url, $deps, $version, true );
         } else {
                 wp_register_script( $handle, false, $deps, '2.0.0', true );
@@ -90,6 +86,9 @@ add_action( 'enqueue_block_editor_assets', function () {
                 $fallback_js = "(function(wp){var el=wp.element.createElement,be=wp.blockEditor||wp.editor;var Inner=be.InnerBlocks;wp.blocks.registerBlockType('h-b/scheduled-container',{edit:function(){return el('div',null,'Scheduled Container (inline fallback)');},save:function(){return el(Inner.Content,null);}});})(window.wp);";
                 wp_add_inline_script( $handle, $fallback_js );
         }
+        wp_add_inline_script( $handle, 'window.scblkEditorSettings = ' . wp_json_encode( array(
+                'visitorBypass' => in_array( 'visitor', (array) scblk_get_option( SCBLK_OPTION_VISIBILITY, scblk_visibility_default_roles() ), true ),
+        ) ) . ';', 'before' );
 });
 
 /* -------------------------------------------------------

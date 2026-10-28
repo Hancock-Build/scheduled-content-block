@@ -1,3 +1,54 @@
+/* Scheduling utilities are included here so editor insertion needs only one plugin script. */
+(function (wp) {
+    var date = wp.date;
+    var format = 'Y-m-d\\TH:i';
+
+    function parts(iso) {
+        if (!iso) return { date: '', time: '' };
+        var value = date.getDate(iso);
+        if (isNaN(value.getTime())) return { date: '', time: '' };
+        var local = date.date(format, value);
+        return { date: local.slice(0, 10), time: local.slice(11, 16) };
+    }
+
+    function combine(day, time) {
+        if (!day) return { iso: '' };
+        var local = day + 'T' + (time || '00:00');
+        var value = date.getDate(local);
+        // Reject normalized dates, including nonexistent wall times during a DST jump.
+        if (isNaN(value.getTime()) || date.date(format, value) !== local) {
+            return { error: true };
+        }
+        return { iso: value.toISOString().replace(/\.000Z$/, 'Z') };
+    }
+
+    function timestamp(iso) {
+        return iso ? date.getDate(iso).getTime() : null;
+    }
+
+    function status(attributes, now) {
+        var start = timestamp(attributes.start);
+        var end = timestamp(attributes.end);
+        if ((start !== null && isNaN(start)) || (end !== null && isNaN(end)) ||
+            (start !== null && end !== null && end < start)) return 'invalid';
+        if (start === null && end === null) return 'unscheduled';
+        if (start !== null && now < start) return 'upcoming';
+        if (end !== null && now > end) return 'expired';
+        return 'active';
+    }
+
+    function timezone() {
+        var settings = date.getSettings().timezone;
+        if (settings.string) return settings.string;
+        var minutes = Math.round(Number(settings.offset || 0) * 60);
+        var absolute = Math.abs(minutes);
+        return 'UTC' + (minutes < 0 ? '-' : '+') +
+            String(Math.floor(absolute / 60)).padStart(2, '0') + ':' + String(absolute % 60).padStart(2, '0');
+    }
+
+    window.scblkSchedule = { parts: parts, combine: combine, status: status, timezone: timezone };
+})(window.wp);
+
 (function (wp) {
     var el = wp.element.createElement;
     var __ = wp.i18n.__;
@@ -26,8 +77,10 @@
         edit: function (props) {
             var a = props.attributes;
             var setAttributes = props.setAttributes;
+            var editorSettings = window.scblkEditorSettings;
+            var previewAvailable = !!editorSettings && typeof editorSettings.visitorBypass === 'boolean';
             var previewState = useState(false);
-            var preview = previewState[0];
+            var preview = previewState[0] && previewAvailable;
             var previewTimeState = useState('');
             var previewTime = previewTimeState[0];
             var nowState = useState(Date.now());
@@ -46,7 +99,7 @@
             var currentStatus = schedule.status(a, nowState[0]);
             var previewResult = schedule.combine(previewTime.slice(0, 10), previewTime.slice(11));
             var previewStatus = schedule.status(a, previewTime && !previewResult.error ? new Date(previewResult.iso).getTime() : nowState[0]);
-            var visitorBypass = !!window.scblkEditorSettings.visitorBypass;
+            var visitorBypass = previewAvailable && editorSettings.visitorBypass;
             var visible = visitorBypass || previewStatus === 'active' || previewStatus === 'unscheduled';
 
             function fieldError(key, value) {
@@ -116,8 +169,8 @@
                     el(c.PanelBody, { title: __('Visitor Preview (editor only)', 'scheduled-content-block'), initialOpen: false },
                         el(c.ToggleControl, {
                             label: __('Preview visitor visibility', 'scheduled-content-block'), checked: preview,
-                            onChange: previewState[1],
-                            help: __('Simulates this container for logged-out visitors inside the editor. Preview controls and status labels never appear on your website.', 'scheduled-content-block')
+                            onChange: previewState[1], disabled: !previewAvailable,
+                            help: !previewAvailable ? __('Visitor preview settings could not load. Reload the editor or check your site’s script policy.', 'scheduled-content-block') : __('Simulates this container for logged-out visitors inside the editor. Preview controls and status labels never appear on your website.', 'scheduled-content-block')
                         }),
                         preview ? el('div', null,
                             el('label', { htmlFor: prefix + '-preview-time' }, __('Preview at site date and time', 'scheduled-content-block')),

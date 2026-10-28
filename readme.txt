@@ -61,6 +61,8 @@ Role settings now accept every registered role. Date controls no longer silently
 * Preserve parent serialization and surviving siblings when deleting expired nested containers.
 * Request a pre-deletion WordPress revision and preserve literal backslashes when saving remaining content.
 * Add editor-only status and visitor visibility preview using the current or a chosen site time; preview state is never serialized.
+* Include scheduling helpers in the editor script to avoid a missing helper request crashing new or existing blocks; include the release version in its cache key.
+* Keep content editing available with a clear message if the visitor preview configuration cannot load.
 * Document scheduling behavior, upgrade compatibility, deletion recovery, and test procedures.
 * Tested with WordPress 7.1.4 and PHP 8.2.
 

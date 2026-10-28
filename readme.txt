@@ -42,7 +42,6 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 * Include scheduling helpers in the editor script to avoid a missing helper request crashing new or existing blocks; include the release version in its cache key.
 * Plugin now keeps content editing available with a clear message if the visitor preview configuration cannot load.
 * Fixed role sanitization so built-in and custom roles can be saved; allow clearing all bypass roles.
-* Tested with WordPress 7.1.4 and PHP 8.2.
 
 = 1.1.0 =
 * Add an optional per-block setting to delete scheduled blocks after the end date passes.

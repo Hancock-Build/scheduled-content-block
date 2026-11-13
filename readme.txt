@@ -24,16 +24,6 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 * Preview any scheduled content in the WordPress editor.
 * Option to automatically delete any scheduled blocks once the date/time has expired.
 
-== Recurring schedules ==
-
-In the block editor, open Display Schedule, choose the start and end of the first visible window, then choose Repeat. Select Daily, Weekly, Monthly, or Yearly and optionally change Repeat every (1–365). Leave Repeat set to Does not repeat to keep a one-time schedule, including open-ended start/end dates.
-
-Repeating schedules require both dates and an end later than the start. They repeat indefinitely from the first start date; the block is visible during each window and hidden between occurrences. For example, set Monday 9:00–17:00 and choose Weekly to show the block every Monday during those hours, or choose an interval of 2 for alternate Mondays. Existing role bypass and hidden placeholder settings still apply.
-
-Repeats follow the WordPress site timezone and preserve the first window's number of calendar days and start/end wall times, including overnight windows. Monthly and yearly repeats use the last available day when the original start day does not exist (January 31 becomes February 28 or 29, then returns to March 31; February 29 becomes February 28 in non-leap years). Daylight saving gaps move nonexistent times forward by the clock change; repeated hours use the earlier occurrence. If a clock change moves the start past the end, that occurrence stays hidden.
-
-Visitor Preview can check future occurrences at any site date/time. Automatic deletion is disabled for repeating schedules so the block survives for future occurrences. To enable deletion, first switch back to a one-time schedule and review its end date. If Breeze integration is enabled, cache purges continue at future recurring boundaries. As with other scheduled purges, these depend on WordPress cron running on time.
-
 == Screenshots ==
 
 1. Search for or locate the Scheduled Container Block in the WordPress editor to get started.

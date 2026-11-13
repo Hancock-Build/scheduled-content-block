@@ -26,11 +26,59 @@
         return iso ? date.getDate(iso).getTime() : null;
     }
 
+    // Mirror includes/schedule.php: calendar shifts always use the original boundary.
+    function recurrenceBoundary(boundary, frequency, interval, index, windowStart) {
+        if (index === 0) return boundary;
+        var local = date.date('Y-m-d\\TH:i:s', new Date(boundary));
+        var anchor = windowStart === undefined ? local : date.date('Y-m-d\\TH:i:s', new Date(windowStart));
+        var daySpan = Math.round((Date.parse(local.slice(0, 10) + 'T00:00:00Z') - Date.parse(anchor.slice(0, 10) + 'T00:00:00Z')) / 86400000);
+        var shifted = new Date(anchor.slice(0, 10) + local.slice(10) + 'Z');
+        var amount = interval * index;
+        if (frequency === 'daily' || frequency === 'weekly') {
+            shifted.setUTCDate(shifted.getUTCDate() + amount * (frequency === 'weekly' ? 7 : 1));
+        } else {
+            var day = shifted.getUTCDate();
+            shifted.setUTCDate(1);
+            shifted.setUTCMonth(shifted.getUTCMonth() + amount * (frequency === 'yearly' ? 12 : 1));
+            var last = new Date(shifted.getTime());
+            last.setUTCMonth(last.getUTCMonth() + 1, 0);
+            shifted.setUTCDate(Math.min(day, last.getUTCDate()));
+        }
+        shifted.setUTCDate(shifted.getUTCDate() + daySpan);
+        // WordPress moves nonexistent spring-forward times forward by the DST gap.
+        return date.getDate(shifted.toISOString().slice(0, 19)).getTime();
+    }
+
+    function nextRecurrenceIndex(anchor, frequency, interval, now, windowStart) {
+        if (anchor > now) return 0;
+        var low = 0;
+        var high = 1;
+        while (recurrenceBoundary(anchor, frequency, interval, high, windowStart) <= now) {
+            low = high;
+            high *= 2;
+        }
+        while (high - low > 1) {
+            var middle = Math.floor((low + high) / 2);
+            if (recurrenceBoundary(anchor, frequency, interval, middle, windowStart) <= now) low = middle;
+            else high = middle;
+        }
+        return high;
+    }
+
     function status(attributes, now) {
         var start = timestamp(attributes.start);
         var end = timestamp(attributes.end);
         if ((start !== null && isNaN(start)) || (end !== null && isNaN(end)) ||
             (start !== null && end !== null && end < start)) return 'invalid';
+        var frequency = attributes.recurrence === undefined ? 'none' : attributes.recurrence;
+        if (frequency !== 'none') {
+            var interval = attributes.recurrenceInterval === undefined ? 1 : attributes.recurrenceInterval;
+            if (['daily', 'weekly', 'monthly', 'yearly'].indexOf(frequency) === -1 ||
+                !Number.isInteger(interval) || interval < 1 || interval > 365 || start === null || end === null || end <= start) return 'invalid';
+            var next = nextRecurrenceIndex(start, frequency, interval, now);
+            if (next === 0) return 'upcoming';
+            return now <= recurrenceBoundary(end, frequency, interval, next - 1, start) ? 'active' : 'inactive';
+        }
         if (start === null && end === null) return 'unscheduled';
         if (start !== null && now < start) return 'upcoming';
         if (end !== null && now > end) return 'expired';
@@ -63,6 +111,7 @@
         unscheduled: __('No schedule', 'scheduled-content-block'),
         upcoming: __('Upcoming', 'scheduled-content-block'),
         active: __('Active', 'scheduled-content-block'),
+        inactive: __('Hidden between occurrences', 'scheduled-content-block'),
         expired: __('Expired', 'scheduled-content-block'),
         invalid: __('Invalid schedule', 'scheduled-content-block')
     };
@@ -90,6 +139,19 @@
             var blockProps = be.useBlockProps({ className: 'scblk-editor-frame' });
             var innerProps = be.useInnerBlocksProps({ className: 'scblk-editor-inner' }, { templateLock: false });
             var prefix = 'scblk-' + props.clientId;
+            var repeating = a.recurrence !== 'none';
+            var recurrenceOptions = [
+                { label: __('Does not repeat', 'scheduled-content-block'), value: 'none' },
+                { label: __('Daily', 'scheduled-content-block'), value: 'daily' },
+                { label: __('Weekly', 'scheduled-content-block'), value: 'weekly' },
+                { label: __('Monthly', 'scheduled-content-block'), value: 'monthly' },
+                { label: __('Yearly', 'scheduled-content-block'), value: 'yearly' }
+            ];
+            var intervalUnits = {
+                daily: __('day(s)', 'scheduled-content-block'), weekly: __('week(s)', 'scheduled-content-block'),
+                monthly: __('month(s)', 'scheduled-content-block'), yearly: __('year(s)', 'scheduled-content-block')
+            };
+            var recurrenceSummary = repeating ? sprintf(__('Every %1$s %2$s', 'scheduled-content-block'), a.recurrenceInterval, intervalUnits[a.recurrence] || '') : recurrenceOptions[0].label;
 
             useEffect(function () {
                 var timer = setInterval(function () { nowState[1](Date.now()); }, 1000);
@@ -145,18 +207,28 @@
                 el(be.InspectorControls, null,
                     el(c.PanelBody, { title: __('Display Schedule', 'scheduled-content-block'), initialOpen: true },
                         el('p', null, sprintf(__('Site timezone: %s', 'scheduled-content-block'), schedule.timezone())),
-                        el('p', null, __('Leave a boundary empty for no start or no end. During the repeated hour when daylight saving ends, the earlier occurrence is used.', 'scheduled-content-block')),
+                        el('p', null, repeating ? __('Start and end define the first visible window. It repeats indefinitely, and the block is hidden between occurrences.', 'scheduled-content-block') : __('Leave a boundary empty for no start or no end. During the repeated hour when daylight saving ends, the earlier occurrence is used.', 'scheduled-content-block')),
                         dateControls('start', __('Start', 'scheduled-content-block')),
                         dateControls('end', __('End', 'scheduled-content-block')),
+                        el(c.SelectControl, {
+                            label: __('Repeat', 'scheduled-content-block'), value: a.recurrence, options: recurrenceOptions,
+                            onChange: function (v) { setAttributes({ recurrence: v, deleteAfterEnd: v === 'none' ? a.deleteAfterEnd : false }); }
+                        }),
+                        repeating ? el(c.TextControl, {
+                            label: __('Repeat every', 'scheduled-content-block'), type: 'number', min: 1, max: 365, step: 1,
+                            value: a.recurrenceInterval,
+                            onChange: function (v) { setAttributes({ recurrenceInterval: Number(v) }); },
+                            help: sprintf(__('Choose 1–365 %s. Repeats use the site timezone. Short months use the last available day; daylight saving gaps move times forward and repeated hours use the earlier occurrence.', 'scheduled-content-block'), intervalUnits[a.recurrence] || '')
+                        }) : null,
                         currentStatus === 'invalid' ? el(c.Notice, { status: 'error', isDismissible: false },
-                            __('The end must be at or after the start, and both dates must be valid. Visitors will see the hidden state until you correct the schedule.', 'scheduled-content-block')) : null),
+                            repeating ? __('Repeating schedules need valid start and end dates, an end later than the start, and a whole repeat interval from 1 to 365. Visitors will see the hidden state until you correct the schedule.', 'scheduled-content-block') : __('The end must be at or after the start, and both dates must be valid. Visitors will see the hidden state until you correct the schedule.', 'scheduled-content-block')) : null),
                     el(c.PanelBody, { title: __('Visibility Options', 'scheduled-content-block'), initialOpen: false },
                         el(c.ToggleControl, {
                             label: __('Automatically delete block once the end date has passed.', 'scheduled-content-block'),
-                            checked: !!a.deleteAfterEnd, onChange: function (v) { setAttributes({ deleteAfterEnd: v }); },
-                            help: __('Deletes this container and everything inside it from the saved post. Revision recovery depends on WordPress revisions being enabled. Copy recovered content and turn deletion off before saving it again.', 'scheduled-content-block')
+                            checked: !repeating && !!a.deleteAfterEnd, disabled: repeating, onChange: function (v) { setAttributes({ deleteAfterEnd: v }); },
+                            help: repeating ? __('Automatic deletion is disabled for repeating schedules so future occurrences remain available.', 'scheduled-content-block') : __('Deletes this container and everything inside it from the saved post. Revision recovery depends on WordPress revisions being enabled. Copy recovered content and turn deletion off before saving it again.', 'scheduled-content-block')
                         }),
-                        a.deleteAfterEnd && !a.end ? el(c.Notice, { status: 'warning', isDismissible: false },
+                        !repeating && a.deleteAfterEnd && !a.end ? el(c.Notice, { status: 'warning', isDismissible: false },
                             __('Set an end date to enable automatic deletion.', 'scheduled-content-block')) : null,
                         el(c.ToggleControl, {
                             label: __('Show a placeholder message when hidden', 'scheduled-content-block'),
@@ -182,7 +254,8 @@
                 el('div', blockProps,
                     el(c.Notice, { status: currentStatus === 'invalid' ? 'warning' : 'info', isDismissible: false },
                         el('strong', null, __('Scheduled Container', 'scheduled-content-block') + ': ' + labels[currentStatus]),
-                        el('div', null, sprintf(__('Start: %1$s | End: %2$s', 'scheduled-content-block'), readable(a.start), readable(a.end)))),
+                        el('div', null, sprintf(__('Start: %1$s | End: %2$s', 'scheduled-content-block'), readable(a.start), readable(a.end))),
+                        repeating ? el('div', null, recurrenceSummary) : null),
                     preview ? el('div', { className: 'scblk-visitor-preview', role: 'status' },
                         el('strong', null, __('Visitor preview', 'scheduled-content-block') + ': ' + labels[previewStatus]),
                         el('p', null, __('This preview applies to this container’s schedule. Nested containers follow their own schedules.', 'scheduled-content-block')),

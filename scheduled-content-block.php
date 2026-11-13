@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Scheduled Content Block
  * Description: A simple container block that enables the easy scheduling of content on WordPress pages or posts.
- * Version: 2.0.0
+ * Version: 2.1.0
  * Requires PHP: 8.2
  * Author: h.b Plugins
  * Author URI: https://hancock.build
@@ -21,6 +21,8 @@ define( 'SCBLK_META_BREEZE_EVENTS', '_scblk_breeze_events' );
 define( 'SCBLK_CRON_HOOK', 'scblk_breeze_cache_purge' );
 define( 'SCBLK_META_DELETE_EVENTS', '_scblk_delete_events' );
 define( 'SCBLK_DELETE_CRON_HOOK', 'scblk_delete_expired_blocks' );
+
+require_once __DIR__ . '/includes/schedule.php';
 
 /**
  * Retrieve a plugin option while falling back to a default value.
@@ -77,10 +79,10 @@ add_action( 'enqueue_block_editor_assets', function () {
         $url    = SCBLK_PLUGIN_URL . 'block/editor.js';
 
         if ( file_exists( $path ) ) {
-                $version = '2.0.0-' . filemtime( $path );
+                $version = '2.1.0-' . filemtime( $path );
                 wp_enqueue_script( $handle, $url, $deps, $version, true );
         } else {
-                wp_register_script( $handle, false, $deps, '2.0.0', true );
+                wp_register_script( $handle, false, $deps, '2.1.0', true );
                 wp_enqueue_script( $handle );
 
                 $fallback_js = "(function(wp){var el=wp.element.createElement,be=wp.blockEditor||wp.editor;var Inner=be.InnerBlocks;wp.blocks.registerBlockType('h-b/scheduled-container',{edit:function(){return el('div',null,'Scheduled Container (inline fallback)');},save:function(){return el(Inner.Content,null);}});})(window.wp);";
@@ -92,7 +94,7 @@ add_action( 'enqueue_block_editor_assets', function () {
 });
 
 /* -------------------------------------------------------
- * Core render logic (unchanged)
+ * Core render logic
  * -----------------------------------------------------*/
 function scblk_render_callback( $attributes, $content, $block ) {
 	$defaults = array(
@@ -101,6 +103,8 @@ function scblk_render_callback( $attributes, $content, $block ) {
                 'showPlaceholder'  => false,
                 'placeholderText'  => '',
                 'deleteAfterEnd'   => false,
+                'recurrence'       => 'none',
+                'recurrenceInterval' => 1,
         );
 	$atts = wp_parse_args( $attributes, $defaults );
 
@@ -117,30 +121,8 @@ function scblk_render_callback( $attributes, $content, $block ) {
                 return $content;
         }
 
-	$now     = scblk_now_site_ts();
-	$startTs = scblk_parse_site_ts( $atts['start'] );
-	$endTs   = scblk_parse_site_ts( $atts['end'] );
-
-	$hasStart = ( $atts['start'] !== '' && $startTs !== null );
-	$hasEnd   = ( $atts['end']   !== '' && $endTs   !== null );
-
-	// If user set a value but it failed to parse, hide (safe).
-        $range_invalid = ( $hasStart && $hasEnd && $startTs !== null && $endTs !== null && $endTs < $startTs );
-        $invalid = ( $atts['start'] !== '' && $startTs === null ) || ( $atts['end'] !== '' && $endTs === null ) || $range_invalid;
-        if ( $invalid ) {
-                return ! empty( $atts['showPlaceholder'] ) ? '<div class="scblk-placeholder" aria-hidden="true">' . esc_html( (string) $atts['placeholderText'] ) . '</div>' : '';
-        }
-
-	$visible = true;
-	if ( $hasStart && $hasEnd ) {
-		$visible = ( $now >= $startTs ) && ( $now <= $endTs );
-	} elseif ( $hasStart ) {
-		$visible = ( $now >= $startTs );
-	} elseif ( $hasEnd ) {
-		$visible = ( $now <= $endTs );
-	}
-
-	if ( $visible ) {
+	$state = scblk_schedule_state( $atts, scblk_now_site_ts() );
+	if ( in_array( $state['status'], array( 'active', 'unscheduled' ), true ) ) {
 		return $content;
 	}
 	return ! empty( $atts['showPlaceholder'] ) ? '<div class="scblk-placeholder" aria-hidden="true">' . esc_html( (string) $atts['placeholderText'] ) . '</div>' : '';
@@ -202,7 +184,7 @@ function scblk_remove_expired_blocks( $blocks, $now, &$changed ) {
                 }
                 if ( $block['blockName'] === 'h-b/scheduled-container' ) {
                         $atts = isset( $block['attrs'] ) ? $block['attrs'] : array();
-                        if ( ! empty( $atts['deleteAfterEnd'] ) && ! empty( $atts['end'] ) ) {
+                        if ( scblk_can_delete_after_end( $atts ) ) {
                                 $end_ts = scblk_parse_site_ts( $atts['end'] );
                                 if ( $end_ts !== null && $end_ts <= $now ) {
                                         $changed = true;
@@ -284,7 +266,7 @@ function scblk_schedule_delete_events( $post_id, $post, $update ) {
                         if ( empty( $b['blockName'] ) ) continue;
                         if ( $b['blockName'] === 'h-b/scheduled-container' ) {
                                 $atts = isset( $b['attrs'] ) ? $b['attrs'] : array();
-                                if ( ! empty( $atts['deleteAfterEnd'] ) && ! empty( $atts['end'] ) ) {
+                                if ( scblk_can_delete_after_end( $atts ) ) {
                                         $ts = scblk_parse_site_ts( $atts['end'] );
                                         if ( $ts !== null ) {
                                                 if ( $ts > $now ) {
@@ -533,7 +515,7 @@ function scblk_breeze_purge_all() {
  * at each future boundary (start/end). We store & clean up scheduled events
  * per post so updates don't leave stale cron jobs behind.
  */
-add_action( 'save_post', function ( $post_id, $post, $update ) {
+function scblk_schedule_breeze_events( $post_id, $post, $update ) {
         if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) return;
         if ( wp_is_post_revision( $post_id ) || 'trash' === $post->post_status ) return;
 
@@ -560,14 +542,8 @@ add_action( 'save_post', function ( $post_id, $post, $update ) {
 			if ( empty( $b['blockName'] ) ) continue;
 			if ( $b['blockName'] === 'h-b/scheduled-container' ) {
 				$atts = isset( $b['attrs'] ) ? $b['attrs'] : array();
-				if ( ! empty( $atts['start'] ) ) {
-					$ts = scblk_parse_site_ts( $atts['start'] );
-					if ( $ts && $ts > $now ) $boundaries[] = array( $ts, 'start' );
-				}
-				if ( ! empty( $atts['end'] ) ) {
-					$ts = scblk_parse_site_ts( $atts['end'] );
-					if ( $ts && $ts > $now ) $boundaries[] = array( $ts, 'end' );
-				}
+				$state = scblk_schedule_state( $atts, $now );
+				$boundaries = array_merge( $boundaries, $state['boundaries'] );
 			}
 			if ( ! empty( $b['innerBlocks'] ) && is_array( $b['innerBlocks'] ) ) {
 				$walk( $b['innerBlocks'] );
@@ -596,7 +572,8 @@ add_action( 'save_post', function ( $post_id, $post, $update ) {
         } else {
                 delete_post_meta( $post_id, SCBLK_META_BREEZE_EVENTS );
         }
-}, 10, 3 );
+}
+add_action( 'save_post', 'scblk_schedule_breeze_events', 10, 3 );
 
 /** Unschedule previously registered events for a post (if any). */
 function scblk_breeze_unschedule_for_post( $post_id ) {
@@ -634,6 +611,9 @@ function scblk_handle_breeze_cache_purge( $post_id, $type, $ts ) {
                 if ( $events ) update_post_meta( $post_id, SCBLK_META_BREEZE_EVENTS, $events );
                 else delete_post_meta( $post_id, SCBLK_META_BREEZE_EVENTS );
         }
+        // Re-read current content and arm the next occurrences, even after a delayed cron run.
+        $post = get_post( $post_id );
+        if ( $post && 'trash' !== $post->post_status ) scblk_schedule_breeze_events( $post_id, $post, true );
 }
 add_action( SCBLK_CRON_HOOK, 'scblk_handle_breeze_cache_purge', 10, 3 );
 

@@ -1,11 +1,11 @@
 {
   "apiVersion": 3,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "h-b/scheduled-container",
   "title": "Scheduled Container",
   "category": "design",
   "icon": "clock",
-  "description": "A container that reveals its inner blocks only between a start and end time.",
+  "description": "A container that reveals its inner blocks during a one-time or recurring schedule.",
   "keywords": ["schedule", "visibility", "container", "time"],
   "textdomain": "scheduled-content-block",
   "style": "file:./style.css",
@@ -13,6 +13,8 @@
   "attributes": {
     "start": { "type": "string", "default": "" },
     "end": { "type": "string", "default": "" },
+    "recurrence": { "type": "string", "default": "none" },
+    "recurrenceInterval": { "type": "number", "default": 1 },
     "showPlaceholder": { "type": "boolean", "default": false },
     "placeholderText": { "type": "string", "default": "" },
     "deleteAfterEnd": { "type": "boolean", "default": false }

@@ -4,7 +4,7 @@ Tags: blocks, gutenberg, editor, gutenberg blocks, dynamic content
 Requires at least: 6.0
 Tested up to: 7.1.4
 Requires PHP: 8.2
-Stable tag: 2.0.0
+Stable tag: 2.1.0
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -17,11 +17,22 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 == Features ==
 
 * Simple container block, allowing you to display content within the block during a specific timeframe.
+* Optional daily, weekly, monthly, or yearly schedules, including custom intervals such as every two weeks or every three months.
 * Optional integration with the Breeze caching plugin, purging the site's cache when content is scheduled to become active or inactive.
 * Change who is able to see scheduled content on your site with role-based controls, including custom roles.
 * Clear start/end times displayed in the editor.
 * Preview any scheduled content in the WordPress editor.
 * Option to automatically delete any scheduled blocks once the date/time has expired.
+
+== Recurring schedules ==
+
+In the block editor, open Display Schedule, choose the start and end of the first visible window, then choose Repeat. Select Daily, Weekly, Monthly, or Yearly and optionally change Repeat every (1–365). Leave Repeat set to Does not repeat to keep a one-time schedule, including open-ended start/end dates.
+
+Repeating schedules require both dates and an end later than the start. They repeat indefinitely from the first start date; the block is visible during each window and hidden between occurrences. For example, set Monday 9:00–17:00 and choose Weekly to show the block every Monday during those hours, or choose an interval of 2 for alternate Mondays. Existing role bypass and hidden placeholder settings still apply.
+
+Repeats follow the WordPress site timezone and preserve the first window's number of calendar days and start/end wall times, including overnight windows. Monthly and yearly repeats use the last available day when the original start day does not exist (January 31 becomes February 28 or 29, then returns to March 31; February 29 becomes February 28 in non-leap years). Daylight saving gaps move nonexistent times forward by the clock change; repeated hours use the earlier occurrence. If a clock change moves the start past the end, that occurrence stays hidden.
+
+Visitor Preview can check future occurrences at any site date/time. Automatic deletion is disabled for repeating schedules so the block survives for future occurrences. To enable deletion, first switch back to a one-time schedule and review its end date. If Breeze integration is enabled, cache purges continue at future recurring boundaries. As with other scheduled purges, these depend on WordPress cron running on time.
 
 == Screenshots ==
 
@@ -31,6 +42,14 @@ Scheduled Content Block is a WordPress plugin that enables easy scheduling of co
 4. Use the plugin settings to change who can view the block outside of its set schedule and integrate with the Breeze cache plugin.
 
 == Changelog ==
+
+= 2.1.0 =
+* Add optional daily, weekly, monthly, and yearly recurring visibility windows to the block editor, with custom repeat intervals from 1 to 365.
+* Keep start/end date and time controls for the first window, then repeat in the site timezone with support for overnight windows, month ends, leap years, and daylight saving changes.
+* Show recurring schedule summaries and a hidden-between-occurrences status in the editor and Visitor Preview.
+* Protect recurring blocks from automatic deletion, including previously scheduled deletion jobs.
+* Re-arm Breeze cache purges for later occurrences and clear obsolete events when schedules change.
+* Preserve existing one-time schedules, placeholders, and role-based visibility overrides.
 
 = 2.0.0 =
 * Used the WordPress date API with an explicit dependency for consistent site timezone handling, including fixed offsets and daylight saving transitions.
